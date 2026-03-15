@@ -62,20 +62,26 @@ Important: Change `finpilot` to your repository name in these 6 files:
 Then open a shell in the project root and run
 
 ```bash
-git submodules init
-git submodules update --remote
+git submodule init
+git submodule update --remote
 cd tr-osforge
 git checkout main
 ```
 
-### 3. Enable GitHub Actions
+### 3. Configure the GitHub Repository
 
 - Go to the "Actions" tab in your repository
 - Click "I understand my workflows, go ahead and enable them"
 
 Your first build will start automatically! 
 
-Note: Image signing is disabled by default. Your images will build successfully without any signing keys. Once you're ready for production, see "Optional: Enable Image Signing" below.
+Note: Image signing is disabled by default. Your images will build successfully without any
+signing keys. Once you're ready for production, see "Optional: Enable Image Signing" below.
+
+- Enable pull requests for RenovateBot
+- Set up status checks on "build and push image"
+- Enable automerge
+- Set up PAT for Renovate workflow so automerge will actuall work
 
 ### 4. Customize Your Image
 

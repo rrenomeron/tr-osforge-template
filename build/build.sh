@@ -8,6 +8,9 @@ echo "Building ${IMAGE_NAME}:${TAG}"
 # The scripts can be found in reusable_scripts/build; include the name without the ".sh"
 # suffix, e.g. putting "google-chrome" in this array will run "google-chrome.sh" in your build.
 # The scripts are run in order.
+
+# This is the standard list for a non-Bluefin desktop.
+# Remove "bluefin-parity" if the base image is Bluefin.
 OSFORGE_SCRIPTS_TO_USE=(
     "flatpak-substiution-removals"
     "bluefin-parity"
@@ -19,8 +22,19 @@ OSFORGE_SCRIPTS_TO_USE=(
     "virtualization"
     "docker"
 )
+if command -v dnf5; then
+    export DNF_CMD=dnf5
+else 
+    export DNF_CMD=dnf
+fi
 
-/ctx/build/custom.sh
+echo "=========================================================================================="
+echo " STARTING $IMAGE_NAME OVERRIDES (PREBUILD)"
+echo "=========================================================================================="
+/ctx/build/image-overrides-prebuild.sh
+echo "=========================================================================================="
+echo " $IMAGE_NAME OVERRIDES (PREBUILD) FINISHED "
+echo "=========================================================================================="
 
 for scriptname in "${OSFORGE_SCRIPTS_TO_USE[@]}"; do
     echo "=========================================================================================="
@@ -37,5 +51,13 @@ echo " STARTING $IMAGE_NAME OVERRIDES "
 echo "=========================================================================================="
 /ctx/build/image-overrides.sh
 echo "=========================================================================================="
-echo " $IMAGE_NAME OVERRIDES FINISHED -- BUILD COMPLETE "
+echo " $IMAGE_NAME OVERRIDES FINISHED  "
+echo "=========================================================================================="
+
+echo "=========================================================================================="
+echo " STARTING CUSTOM FLATPAK/BREW/UJUST CONFIGURATION" 
+echo "=========================================================================================="
+/ctx/build/custom.sh
+echo "=========================================================================================="
+echo " CUSTOM FLATPAK/BREW/UJUST CONFIGURATION FINISHED -- BUILD COMPLETE "
 echo "=========================================================================================="
