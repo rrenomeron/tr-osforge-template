@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - production
     paths-ignore:
       - '**/README.md'
   workflow_dispatch:
@@ -42,6 +43,18 @@ jobs:
           echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
           echo "IMAGE_NAME=${IMAGE_NAME,,}" >> ${GITHUB_ENV}
 
+          # Redefine the default tag
+          # "testing" for main, $BRANCH for everything else
+          BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          if [ "$BRANCH" == "main" ]; then
+            DEFAULT_TAG="testing"
+          else
+            DEFAULT_TAG=${BRANCH//\//-}
+          fi
+          echo "DEFAULT_TAG=$DEFAULT_TAG" >> ${GITHUB_ENV}
+          echo "Head ref: $GITHUB_HEAD_REF"
+          echo "Branch $BRANCH"
+          echo "Default tag: $DEFAULT_TAG"
       # These stage versions are pinned by https://github.com/renovatebot/renovate
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
@@ -117,6 +130,20 @@ jobs:
           tags: ${{ env.DEFAULT_TAG }}
           labels: ${{ steps.metadata.outputs.labels }}
           oci: false
+
+      - name: Rechunk Image
+        run: |
+          echo "Saving image to rootful storage ..."
+          podman save -o image.tar localhost/"${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
+          sudo podman image load < image.tar
+          echo "... done."
+          sudo podman run --rm --privileged \
+            -v /var/lib/containers:/var/lib/containers \
+            --entrypoint /usr/libexec/bootc-base-imagectl \
+            quay.io/fedora/fedora-bootc:43 \
+            rechunk --max-layers 96 \
+            localhost/"${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}" \
+            localhost/"${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
 
       # Tag for registry
       - name: Tag for registry

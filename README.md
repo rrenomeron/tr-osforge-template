@@ -1,26 +1,9 @@
-# finpilot
+# Template for tr-osforge images
 
-A template for building custom bootc operating system images based on the lessons from [Universal Blue](https://universal-blue.org/) and [Bluefin](https://projectbluefin.io). It is designed to be used manually, but is optimized to be bootstraped by GitHub Copilot. After set up you'll have your own custom Linux. 
+A template for building custom bootc operating system images based on the lessons from [Universal Blue](https://universal-blue.org/) and [Bluefin](https://projectbluefin.io). It is designed to be used manually.  
 
 This template uses the **multi-stage build architecture** from , combining resources from multiple OCI containers for modularity and maintainability. See the [Architecture](#architecture) section below for details.
 
-**Unlike previous templates, you are not modifying Bluefin and making changes.**: You are assembling your own Bluefin in the same exact way that Bluefin, Aurora, and Bluefin LTS are built. This is way more flexible and better for everyone since the image-agnostic and desktop things we love about Bluefin lives in @projectbluefin/common. 
-
- Instead, you create your own OS repository based on this template, allowing full customization while leveraging Bluefin's robust build system and shared components.
-
-> Be the one who moves, not the one who is moved.
-
-## Guided Copilot Mode
-
-Here are the steps to guide copilot to make your own repo, or just use it like a regular image template.
-
-1. Click the green "Use this as a template" button and create a new repository
-2. Select your owner, pick a repo name for your OS, and a description
-3. In the "Jumpstart your project with Copilot (optional)" add this, modify to your liking:
-
-```
-Use @projectbluefin/finpilot as a template, name the OS the repository name. Ensure the entire operating system is bootstrapped. Ensure all github actions are enabled and running.  Ensure the README has the github setup instructions for cosign and the other steps required to finish the task.
-```
 
 ## What's Included
 
@@ -30,7 +13,7 @@ Use @projectbluefin/finpilot as a template, name the OS the repository name. Ens
 - Automatic cleanup of old images (90+ days) to keep it tidy
 - Pull request workflow - test changes before merging to main
   - PRs build and validate before merge
-  - `main` branch builds `:stable` images
+  - `main` branch builds `:testing` images
 - Validates your files on pull requests so you never break a build:
   - Brewfile, Justfile, ShellCheck, Renovate config, and it'll even check to make sure the flatpak you add exists on FlatHub
 - Production Grade Features
@@ -65,7 +48,7 @@ Use @projectbluefin/finpilot as a template, name the OS the repository name. Ens
 
 Click "Use this template" to create a new repository from this template.
 
-### 2. Rename the Project
+### 2. Initialize the Project
 
 Important: Change `finpilot` to your repository name in these 6 files:
 
@@ -75,6 +58,15 @@ Important: Change `finpilot` to your repository name in these 6 files:
 4. `artifacthub-repo.yml` (line 5): `repositoryID: your-repo-name`
 5. `custom/ujust/README.md` (~line 175): `localhost/your-repo-name:stable`
 6. `.github/workflows/clean.yml` (line 23): `packages: your-repo-name`
+
+Then open a shell in the project root and run
+
+```bash
+git submodules init
+git submodules update --remote
+cd tr-osforge
+git checkout main
+```
 
 ### 3. Enable GitHub Actions
 
@@ -92,15 +84,28 @@ Choose your base image in `Containerfile` (line 23):
 FROM ghcr.io/ublue-os/bluefin:stable
 ```
 
-Add your packages in `build/10-build.sh`:
+Add "features" for this image from ``tr-osforge`` in `build/build.sh`:
 ```bash
-dnf5 install -y package-name
+# Add the features from tr-osforge that you want to incude in your image.
+# The scripts can be found in reusable_scripts/build; include the name without the ".sh"
+# suffix, e.g. putting "google-chrome" in this array will run "google-chrome.sh" in your build.
+# The scripts are run in order.
+OSFORGE_SCRIPTS_TO_USE=(
+    "flatpak-substiution-removals"
+    "tr-pki"
+    "tr-ui"
+    ...
+)
 ```
+Add things unique to this image in ``build/image-overrides.sh``
 
 Customize your apps:
 - Add Brewfiles in `custom/brew/` ([guide](custom/brew/README.md))
 - Add Flatpaks in `custom/flatpaks/` ([guide](custom/flatpaks/README.md))
 - Add ujust commands in `custom/ujust/` ([guide](custom/ujust/README.md))
+
+... but note what comes "for free" in the ``tr-osforge`` project under
+``reusable_scripting/common``!
 
 ### 5. Development Workflow
 
@@ -112,13 +117,15 @@ All changes should be made via pull requests:
    - Brewfile, Flatpak, Justfile, and shellcheck validation
    - Test image build
 4. Once checks pass, merge the PR
-5. Merging triggers publishes a `:stable` image
+5. Merging triggers publishes a `:testing` image
+
+Merge from ``main`` to ``production`` to create a production image.
 
 ### 6. Deploy Your Image
 
 Switch to your image:
 ```bash
-sudo bootc switch ghcr.io/your-username/your-repo-name:stable
+sudo bootc switch ghcr.io/your-username/your-repo-name:testing
 sudo systemctl reboot
 ```
 
@@ -192,67 +199,17 @@ Ready to take your custom OS to production? Enable these features for enhanced s
     5. Commit and push
   - Status: **Disabled by default** (requires signing first)
 
-- [ ] **Enable Image Rechunking** (Recommended)
-  - Optimizes bootc image layers for better update performance
-  - Reduces update sizes by 5-10x
-  - Improves download resumability with evenly sized layers
-  - To enable:
-    1. Edit `.github/workflows/build.yml`
-    2. Find the "Build Image" step
-    3. Add a rechunk step after the build (see example below)
-  - Status: **Not enabled by default** (optional optimization)
-
-#### Adding Image Rechunking
-
-After building your bootc image, add a rechunk step before pushing to the registry. Here's an example based on the workflow used by [zirconium-dev/zirconium](https://github.com/zirconium-dev/zirconium):
-
-```yaml
-- name: Build image
-  id: build
-  run: sudo podman build -t "${IMAGE_NAME}:${DEFAULT_TAG}" -f ./Containerfile .
-
-- name: Rechunk Image
-  run: |
-    sudo podman run --rm --privileged \
-      -v /var/lib/containers:/var/lib/containers \
-      --entrypoint /usr/libexec/bootc-base-imagectl \
-      "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" \
-      rechunk --max-layers 96 \
-      "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" \
-      "localhost/${IMAGE_NAME}:${DEFAULT_TAG}"
-
-- name: Push to Registry
-  run: sudo podman push "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" "${IMAGE_REGISTRY}/${IMAGE_NAME}:${DEFAULT_TAG}"
-```
-
-Alternative approach using a temporary tag for clarity:
-
-```yaml
-- name: Rechunk Image
-  run: |
-    sudo podman run --rm --privileged \
-      -v /var/lib/containers:/var/lib/containers \
-      --entrypoint /usr/libexec/bootc-base-imagectl \
-      "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" \
-      rechunk --max-layers 67 \
-      "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" \
-      "localhost/${IMAGE_NAME}:${DEFAULT_TAG}-rechunked"
-    
-    # Tag the rechunked image with the original tag
-    sudo podman tag "localhost/${IMAGE_NAME}:${DEFAULT_TAG}-rechunked" "localhost/${IMAGE_NAME}:${DEFAULT_TAG}"
-    sudo podman rmi "localhost/${IMAGE_NAME}:${DEFAULT_TAG}-rechunked"
-```
-
-**Parameters:**
-- `--max-layers`: Maximum number of layers for the rechunked image (typically 67 for optimal balance)
-- The first image reference is the source (input)
-- The second image reference is the destination (output)
-  - When using the same reference for both, the image is rechunked in-place
-  - You can also use different tags (e.g., `-rechunked` suffix) and then retag if preferred
-
-**References:**
-- [CoreOS rpm-ostree build-chunked-oci documentation](https://coreos.github.io/rpm-ostree/build-chunked-oci/)
-- [bootc documentation](https://containers.github.io/bootc/)
+- [ ] **Enable Production Branch & Image Builds**
+  - Do the thing:
+    ```bash
+    git checkout main
+    git checkout -b production
+    git push origin
+    ```
+  - Follow pattern from Bluefin LTS:
+    - ``testing`` tag on ``main`` branch
+    - ``production`` tag on ``production`` branch
+    - Push changes from ``main`` to ``production``
 
 ### After Enabling Production Features
 
@@ -289,7 +246,8 @@ This template follows the **multi-stage build architecture** from @projectbluefi
 
 **Stage 2: Base Image** - Default options:
 - `ghcr.io/ublue-os/silverblue-main:latest` (Fedora-based, default)
-- `quay.io/centos-bootc/centos-bootc:stream10` (CentOS-based alternative)
+- `quay.io/centos-bootc/centos-bootc:stream10` (CentOS-based alternative, no desktop)
+- `quay.io/almalinuxorg/atomic-desktop-gnome:latest` (AlmaLinux based)
 
 ### Benefits of This Architecture
 
@@ -315,6 +273,9 @@ Your build scripts can access these files at:
 - `/ctx/oci/artwork/` - Artwork files
 - `/ctx/oci/brew/` - Homebrew integration files
 
+While not technically an OCI container, the resuable build scripts from ``tr-osforge`` can be found at:
+- `/ctx/oci/tr-osforge`
+
 **Note**: Renovate automatically updates `:latest` tags to SHA digests for reproducible builds.
 
 ## Local Testing
@@ -325,6 +286,12 @@ Test your changes before pushing:
 just build              # Build container image
 just build-qcow2        # Build VM disk image
 just run-vm-qcow2       # Test in browser-based VM
+```
+or for the brave:
+
+```bash
+sudo just build
+sudo bootc switch --transport containers-storage localhost/$IMAGE_NAME:localdev
 ```
 
 ## Community
