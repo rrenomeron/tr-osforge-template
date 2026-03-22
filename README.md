@@ -79,9 +79,37 @@ Note: Image signing is disabled by default. Your images will build successfully 
 signing keys. Once you're ready for production, see "Optional: Enable Image Signing" below.
 
 - Enable pull requests for RenovateBot
+  - Go to "Settings->Actions->General" scroll down to "Workflow permissions"
+  - Select "Read and Write" permissions
+  - Check "Allow GitHub Actions to create and approve pull requests
 - Set up status checks on "build and push image"
+  - Branches->Add Classic Branch Protection Rule
+  - Branch Name Pattern -> Main
+  - Check "Require a pull request before merging"
+    - Uncheck "Require approvals"
+  - Check "Require status checks to pass before merging"
+    - In the text box, start typing "Build and push image", select when it autocompletes
+  - Save the branch protection rule
+- Set up PAT for Renovate so that its PRs will automerge
+  - Go to personal settings
+  - Then "Developer Settings->Personal Access Tokens"
+  - Select "Fine-Grained Tokens", and "Generate New Token"
+    - Token name should be ``$REPOSITORY_NAME-renovate``
+    - Description should be "Token used by Renovate to automate dependency updates"
+    - Set expiration date to whatever you are comfortable with
+    - Repository access -> Only Select Repositories -- set to this repository
+      - Grant access to Contents (Read/Write), Metadata (Read Only), and Pull Requests
+        (Read/Write)
+    - Copy the PAT
+    - Go to "Settings->Secrets and variables->Actions" in the repository
+    - Select "New Repository Secret"
+    - Name: ``$RENOVATE_TOKEN``
+    - Paste the PAT in the "Secret" text box
+    - Open the file ``.github/workflows/renovate.yml`` in the repository
+    - Replace ``${{ secrets.GITHUB_TOKEN }}`` with ``${{ secrets.RENOVATE_TOKEN }}``
+    - Commit and push
 - Enable automerge
-- Set up PAT for Renovate workflow so automerge will actuall work
+
 
 ### 4. Customize Your Image
 
