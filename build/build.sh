@@ -18,6 +18,7 @@ OSFORGE_SCRIPTS_TO_USE=(
     "tr-ui"
     "google-chrome"
     "vscode"
+    "brew"
     "cockpit"
     "virtualization"
     "docker"
