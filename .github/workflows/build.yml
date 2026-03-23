@@ -15,12 +15,12 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_DESC: "My Customized Universal Blue Image"
-  IMAGE_KEYWORDS: "bootc,ublue,universal-blue"
+  IMAGE_DESC: "Fedora Silverblue Customized for the Thorson-Renomeron Organization"
+  IMAGE_KEYWORDS: "bootc,ublue,universal-blue,fedora,silverblue"
   IMAGE_LOGO_URL: "https://avatars.githubusercontent.com/u/120078124?s=200&v=4"  # Put your own image here for a fancy profile on https://artifacthub.io/!
   IMAGE_NAME: "${{ github.event.repository.name }}"  # output image name, usually same as repo name
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"  # do not edit
-  DEFAULT_TAG: "stable"
+  DEFAULT_TAG: "testing"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.brand_name}}-${{ inputs.stream_name }}
@@ -51,6 +51,7 @@ jobs:
           else
             DEFAULT_TAG=${BRANCH//\//-}
           fi
+          
           echo "DEFAULT_TAG=$DEFAULT_TAG" >> ${GITHUB_ENV}
           echo "Head ref: $GITHUB_HEAD_REF"
           echo "Branch $BRANCH"
@@ -60,6 +61,12 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           submodules: recursive
+
+      - name: Get Short SHA
+        id: get-short-sha
+        run: |
+          SHORT_SHA=$(git rev-parse --short ${{ github.sha }})
+          echo "COMMIT_SHORT_SHA"=$SHORT_SHA >> $GITHUB_ENV
 
       # This is optional, but if you see that your builds are way too big for the runners, you can enable this by uncommenting the following lines:
       # - name: Maximize build space
@@ -97,8 +104,8 @@ jobs:
           # Default tags are "$DEFAULT_TAG" and "$DEFAULT_TAG.$date".
           tags: |
             type=raw,value=${{ env.DEFAULT_TAG }}
-            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
-            type=raw,value={{date 'YYYYMMDD'}}
+            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}.${{ env.COMMIT_SHORT_SHA }}
+            type=raw,value={{date 'YYYYMMDD'}}.${{ env.COMMIT_SHORT_SHA }}
             type=sha,enable=${{ github.event_name == 'pull_request' }}
             type=ref,event=pr
           labels: |
@@ -110,7 +117,7 @@ jobs:
             org.opencontainers.image.title=${{ env.IMAGE_NAME }}
             org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/tree/${{ github.sha }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
-            org.opencontainers.image.version=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
+            org.opencontainers.image.version=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}.${{ env.COMMIT_SHORT_SHA }}
             io.artifacthub.package.deprecated=false
             io.artifacthub.package.keywords=${{ env.IMAGE_KEYWORDS }}
             io.artifacthub.package.license=Apache-2.0
@@ -135,20 +142,32 @@ jobs:
           build-args: |
             IMAGE_NAME=${{ env.IMAGE_NAME }}
             TAG=${{ env.DEFAULT_TAG }}
+      # - name: setup Just
+      #   uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b
+
+      # - name: Build Image
+      #   run: \
+      #     just build ${{ env.IMAGE_NAME }} ${{ env.DEFAULT_TAG }}
 
       - name: Rechunk Image
         run: |
           echo "Saving image to rootful storage ..."
           podman save -o image.tar localhost/"${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
           sudo podman image load < image.tar
+          rm image.tar
           echo "... done."
           sudo podman run --rm --privileged \
             -v /var/lib/containers:/var/lib/containers \
             --entrypoint /usr/libexec/bootc-base-imagectl \
             quay.io/fedora/fedora-bootc:43 \
-            rechunk --max-layers 96 \
+            rechunk --max-layers 128 \
             localhost/"${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}" \
             localhost/"${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
+          echo "Saving image to regular storage"  
+          sudo podman save -o image.tar localhost/"${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}"
+          podman image load < image.tar
+          sudo rm image.tar
+          echo "done"
 
       # Tag for registry
       - name: Tag for registry
@@ -180,14 +199,14 @@ jobs:
       #   run: |
       #     OUTPUT_PATH="$(mktemp -d)/sbom.json"
       #     export SYFT_PARALLELISM=$(($(nproc)*2))
-      #     $SYFT_CMD ${IMAGE}:${DEFAULT_TAG} -o spdx-json=${OUTPUT_PATH}
+      #     $SYFT_CMD localhost/${IMAGE}:${DEFAULT_TAG} -o spdx-json=${OUTPUT_PATH}
       #     echo "OUTPUT_PATH=${OUTPUT_PATH}" >> $GITHUB_OUTPUT
 
       # These `if` statements are so that pull requests for your custom images do not make it publish any packages under your name without you knowing
       # They also check if the runner is on the default branch so that things like the merge queue (if you enable it), are going to work
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production')
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -195,7 +214,7 @@ jobs:
 
       - name: Push To GHCR
         uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production')
         id: push
         env:
           REGISTRY_USER: ${{ github.actor }}
@@ -210,21 +229,21 @@ jobs:
       # OPTIONAL: Image Signing with Cosign
       # Signing is disabled by default. To enable, see README.md "Optional: Enable Image Signing" section.
 
-      # - name: Install Cosign
-      #   uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
-      #   if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-      #
-      # - name: Sign container image
-      #   if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-      #   run: |
-      #     IMAGE_FULL="${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
-      #     for tag in ${{ steps.metadata.outputs.tags }}; do
-      #       cosign sign -y --key env://COSIGN_PRIVATE_KEY $IMAGE_FULL:$tag
-      #     done
-      #   env:
-      #     TAGS: ${{ steps.push.outputs.digest }}
-      #     COSIGN_EXPERIMENTAL: false
-      #     COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      
+      - name: Sign container image
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          IMAGE_FULL="${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}"
+          for tag in ${{ steps.metadata.outputs.tags }}; do
+            cosign sign -y --key env://COSIGN_PRIVATE_KEY $IMAGE_FULL:$tag
+          done
+        env:
+          TAGS: ${{ steps.push.outputs.digest }}
+          COSIGN_EXPERIMENTAL: false
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
 
       # OPTIONAL: SBOM Attestation
       # Attaches SBOM (Software Bill of Materials) to your signed image for supply chain security.
