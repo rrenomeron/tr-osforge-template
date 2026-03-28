@@ -37,9 +37,7 @@ This template uses the **multi-stage build architecture** from , combining resou
 - See [custom/ujust/README.md](custom/ujust/README.md) for details
 
 ### Build Scripts
-- Modular numbered scripts (10-, 20-, 30-) run in order
-- Example scripts included for third-party repositories and desktop replacement
-- Helper functions for safe COPR usage
+
 - See [build/README.md](build/README.md) for details
 
 ## Quick Start

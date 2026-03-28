@@ -1,45 +1,34 @@
 # Build Scripts
 
-This directory contains build scripts that run during image creation. Scripts are executed in numerical order.
+This directory contains the scripts that run the majority of the image build process.
 
 ## How It Works
 
-Scripts are named with a number prefix (e.g., `10-build.sh`, `20-onepassword.sh`) and run in ascending order during the container build process.
+The build is controlled by the ``build.sh``.  You'll need to edit it to include the reusable scripts
+from ``tr-osforge`` you'll want to use by adding the names of the scripts (sans the ``.sh`` suffix) to the
+``OSFORGE_SCRIPTS_TO_USE`` array variable in the script.
 
 ## Included Scripts
 
-- **`10-build.sh`** - Main build script for base system modifications, package installation, and service configuration
+- ``build.sh`` - Controller script for the build process.
+- ``custom.sh`` - Sets up the Flatpaks, Brewfiles, and ``ujust`` scripts that are included on your image.
+- ``image-overrides.sh`` - Anything that is specific to this particular image that can't be shared in the ``tr-osforge`` repository.
 
-## Example Scripts
+## How To Make Changes to the Scripts
 
-- **`20-onepassword.sh.example`** - Example showing how to install software from third-party RPM repositories (Google Chrome, 1Password)
+**Make it Reusable when Possible.** Generally, if what you want to add might be useful for one
+of the other images (particularly the desktops), you will want to edit or add to the reusuable
+scripts in the ``tr-osforge`` submodule.
 
-To use an example script:
-1. Remove the `.example` extension
-2. Make it executable: `chmod +x build/20-yourscript.sh`
-3. The build system will automatically run it in numerical order
+**Avoid adding new scripts in this project.** Unless what you're adding is very complicated and
+is not reusable in another image, prefer editing ``image-overrides.sh`` over adding a new
+script and editing ``build.sh`` to run it.
 
-## Creating Your Own Scripts
-
-Create numbered scripts for different purposes:
-
-```bash
-# 10-build.sh - Base system (already exists)
-# 20-drivers.sh - Hardware drivers  
-# 30-development.sh - Development tools
-# 40-gaming.sh - Gaming software
-# 50-cleanup.sh - Final cleanup tasks
-```
-
-### Script Template
-
-```bash
-#!/usr/bin/env bash
-set -oue pipefail
-
-echo "Running custom setup..."
-# Your commands here
-```
+**Managing the Submodule.** When you make a change to a file in the submodule, you will need to
+make two separate commits:
+- A commit in the submodule itself
+- A commit _of_ the submodule in the project -- this will update the version of the submodule
+  that the project will use.
 
 ### Best Practices
 
@@ -48,26 +37,6 @@ echo "Running custom setup..."
 - **Clean up after yourself**: Remove temporary files and disable temporary repos
 - **Test incrementally**: Add one script at a time and test builds
 - **Comment your code**: Future you will thank present you
-
-### Disabling Scripts
-
-To temporarily disable a script without deleting it:
-- Rename it with `.disabled` extension: `20-script.sh.disabled`
-- Or remove execute permission: `chmod -x build/20-script.sh`
-
-## Execution Order
-
-The Containerfile runs scripts like this:
-
-```dockerfile
-RUN /ctx/build/build.sh
-```
-
-If you want to run multiple scripts, you can:
-
-1. **Modify Containerfile** to run each script explicitly
-2. **Create a runner script** that executes all numbered scripts
-3. **Use the default** and keep everything in `10-build.sh` (simplest)
 
 ## Notes
 
